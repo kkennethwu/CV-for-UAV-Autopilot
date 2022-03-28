@@ -2,7 +2,8 @@ import socket
 import threading
 import time
 import numpy as np
-import libh264decoder
+import cv2
+# import libh264decoder
 
 class Tello:
     """Wrapper class to interact with the Tello drone."""
@@ -22,10 +23,10 @@ class Tello:
         """
 
         self.abort_flag = False
-        self.decoder = libh264decoder.H264Decoder()
+        # self.decoder = libh264decoder.H264Decoder()
         self.command_timeout = command_timeout
         self.imperial = imperial
-        self.response = None  
+        self.response = None
         self.frame = None  # numpy array BGR -- current camera output frame
         self.is_freeze = False  # freeze current camera output
         self.last_frame = None
@@ -48,7 +49,7 @@ class Tello:
         self.socket.sendto(b'streamon', self.tello_address)
         print ('sent: streamon')
 
-        self.socket_video.bind((local_ip, self.local_video_port))
+        # self.socket_video.bind((local_ip, self.local_video_port))
 
         # thread for receiving video
         self.receive_video_thread = threading.Thread(target=self._receive_video_thread)
@@ -61,7 +62,7 @@ class Tello:
 
         self.socket.close()
         self.socket_video.close()
-    
+
     def read(self):
         """Return the last frame from camera."""
         if self.is_freeze:
@@ -88,48 +89,96 @@ class Tello:
             except socket.error as exc:
                 print ("Caught exception socket.error : %s" % exc)
 
+    # def _receive_video_thread(self):
+    #     """
+    #     Listens for video streaming (raw h264) from the Tello.
+
+    #     Runs as a thread, sets self.frame to the most recent frame Tello captured.
+
+    #     """
+    #     packet_data = ""
+    #     while True:
+    #         try:
+    #             res_string, ip = self.socket_video.recvfrom(2048)
+    #             packet_data += res_string
+    #             # end of frame
+    #             if len(res_string) != 1460:
+    #                 for frame in self._h264_decode(packet_data):
+    #                     self.frame = frame
+    #                 packet_data = ""
+
+    #         except socket.error as exc:
+    #             print ("Caught exception socket.error : %s" % exc)
+
     def _receive_video_thread(self):
-        """
-        Listens for video streaming (raw h264) from the Tello.
+        video_ip = "udp://{}:{}".format("0.0.0.0", 11111)
+        video_capture = cv2.VideoCapture(video_ip)
+        retval, self.frame = video_capture.read()
+        while retval:
+            retval, frame = video_capture.read()
+            self.frame = frame[..., ::-1] # From BGR to RGB
 
-        Runs as a thread, sets self.frame to the most recent frame Tello captured.
+    def keyboard(self, key):
+        print("key:", key)
+        distance = 0.9
+        degree = 30
+#         if key == ord('1'):
+#             self.takeoff()
+#         if key == ord('2'):
+#             self.land()
+#         if key == ord('i'):
+#             self.move_forward(distance)
+#             print("forward!!!!")
+#         if key == ord('k'):
+#             self.move_backward(distance)
+#             print("backward!!!!")
+#         if key == ord('j'):
+#             self.move_left(distance)
+#             print("left!!!!")
+#         if key == ord('l'):
+#             self.move_right(distance)
+#             print("right!!!!")
+#         if key == ord('s'):
+#             self.move_down(distance)
+#             print("down!!!!")
+#         if key == ord('w'):
+#             self.move_up(distance)
+#             print("up!!!!")
+#         if key == ord('a'):
+#             self.rotate_cw(degree)
+#             print("rotate!!!!")
+#         if key == ord('d'):
+#             self.rotate_ccw(degree)
+#             print("counter rotate!!!!")
+#         if key == ord('5'):
+#             height = self.get_height()
+#             print(height)
+#         if key == ord('6'):
+#             battery = self.get_battery()
+#             print (battery)
 
-        """
-        packet_data = ""
-        while True:
-            try:
-                res_string, ip = self.socket_video.recvfrom(2048)
-                packet_data += res_string
-                # end of frame
-                if len(res_string) != 1460:
-                    for frame in self._h264_decode(packet_data):
-                        self.frame = frame
-                    packet_data = ""
 
-            except socket.error as exc:
-                print ("Caught exception socket.error : %s" % exc)
-    
-    def _h264_decode(self, packet_data):
-        """
-        decode raw h264 format data from Tello
-        
-        :param packet_data: raw h264 data array
-       
-        :return: a list of decoded frame
-        """
-        res_frame_list = []
-        frames = self.decoder.decode(packet_data)
-        for framedata in frames:
-            (frame, w, h, ls) = framedata
-            if frame is not None:
-                # print 'frame size %i bytes, w %i, h %i, linesize %i' % (len(frame), w, h, ls)
+    # def _h264_decode(self, packet_data):
+    #     """
+    #     decode raw h264 format data from Tello
 
-                frame = np.fromstring(frame, dtype=np.ubyte, count=len(frame), sep='')
-                frame = (frame.reshape((h, ls / 3, 3)))
-                frame = frame[:, :w, :]
-                res_frame_list.append(frame)
+    #     :param packet_data: raw h264 data array
 
-        return res_frame_list
+    #     :return: a list of decoded frame
+    #     """
+    #     res_frame_list = []
+    #     frames = self.decoder.decode(packet_data)
+    #     for framedata in frames:
+    #         (frame, w, h, ls) = framedata
+    #         if frame is not None:
+    #             # print 'frame size %i bytes, w %i, h %i, linesize %i' % (len(frame), w, h, ls)
+
+    #             frame = np.fromstring(frame, dtype=np.ubyte, count=len(frame), sep='')
+    #             frame = (frame.reshape((h, ls / 3, 3)))
+    #             frame = frame[:, :w, :]
+    #             res_frame_list.append(frame)
+
+    #     return res_frame_list
 
     def send_command(self, command):
         """
@@ -151,7 +200,7 @@ class Tello:
             if self.abort_flag is True:
                 break
         timer.cancel()
-        
+
         if self.response is None:
             response = 'none_response'
         else:
@@ -160,13 +209,13 @@ class Tello:
         self.response = None
 
         return response
-    
+
     def set_abort_flag(self):
         """
         Sets self.abort_flag to True.
 
         Used by the timer in Tello.send_command() to indicate to that a response
-        
+
         timeout has occurred.
 
         """
@@ -288,7 +337,7 @@ class Tello:
             int: Percent battery life remaining.
 
         """
-        
+
         battery = self.send_command('battery?')
 
         try:
